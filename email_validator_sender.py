@@ -5,7 +5,9 @@
 #   {portfolio_html}
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
+
+
 
 import re
 import dns.resolver
@@ -35,7 +37,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
     handlers=[
-        logging.FileHandler(f"email_validator_{datetime.now().strftime('%Y%m%d_%H%M')}.log"),
+        # logging.FileHandler(f"email_validator_{datetime.now().strftime('%Y%m%d_%H%M')}.log"),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -65,6 +67,7 @@ YOUR_PORTFOLIO = os.getenv("YOUR_PORTFOLIO", "")
 DEFAULT_RESUME_PATH = os.getenv("RESUME_PATH")
 
 print("Sending from:", GMAIL_ADDRESS)
+logger.info(f"Using Gmail account from env: {GMAIL_ADDRESS}")
 
 # ========================== DATA MODEL ==========================
 @dataclass
