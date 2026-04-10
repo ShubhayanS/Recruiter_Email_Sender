@@ -217,7 +217,7 @@ Prepare a CSV like this:
 
 ```csv
 FirstName,LastName,Company
-Alexander,Zlotnikov,Farmers Insurance
+Alexander,Great,Life Line
 John,Doe,Google
 Jane,Smith,Microsoft
 ```
