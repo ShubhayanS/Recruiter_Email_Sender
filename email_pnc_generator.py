@@ -1,11 +1,4 @@
-# ================================================
-# RECRUITER EMAIL GENERATOR + OPTIONAL SENDER LAUNCHER
-# Exhaustive Permutations (All Realistic Formats)
-# ================================================
-
 from dotenv import load_dotenv
-import os
-
 load_dotenv(override=True)
 
 import re
@@ -14,24 +7,24 @@ import os
 import sys
 import shlex
 import argparse
+from pathlib import Path
 from datetime import datetime
 import logging
 from typing import List, Set
-
-
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger(__name__)
 
 SENDER_SCRIPT = "email_validator_sender.py"
-DEFAULT_RESUME_PATH = os.getenv("RESUME_PATH")
+TEMP_DIR = Path("temp")
+TEMP_DIR.mkdir(exist_ok=True)
+
 
 def clean_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z]', '', name.lower().strip())
 
 
 def generate_email_permutations(first: str, last: str, domain: str) -> List[str]:
-    """EXHAUSTIVE generation of all realistic recruiter email formats"""
     f = clean_name(first)
     l = clean_name(last)
     if not f or not l:
@@ -43,7 +36,6 @@ def generate_email_permutations(first: str, last: str, domain: str) -> List[str]
     separators = ['', '.', '-', '_']
     emails: Set[str] = set()
 
-    # Core combinations with every separator
     for sep in separators:
         emails.add(f"{f}{sep}{l}@{domain}")
         emails.add(f"{l}{sep}{f}@{domain}")
@@ -52,7 +44,6 @@ def generate_email_permutations(first: str, last: str, domain: str) -> List[str]
         emails.add(f"{f}{sep}{li}@{domain}")
         emails.add(f"{li}{sep}{f}@{domain}")
 
-    # No separator versions
     emails.add(f"{f}{l}@{domain}")
     emails.add(f"{l}{f}@{domain}")
     emails.add(f"{fi}{l}@{domain}")
@@ -60,11 +51,9 @@ def generate_email_permutations(first: str, last: str, domain: str) -> List[str]
     emails.add(f"{f}{li}@{domain}")
     emails.add(f"{li}{f}@{domain}")
 
-    # Single names
     emails.add(f"{f}@{domain}")
     emails.add(f"{l}@{domain}")
 
-    # Extra common recruiter & corporate patterns
     extras = [
         f"{f}.{l}@{domain}", f"{l}.{f}@{domain}",
         f"{f}{l[0:3]}@{domain}", f"{l}{f[0:3]}@{domain}",
@@ -84,9 +73,9 @@ def find_company_domain(company_name: str) -> str:
     return f"{base}.com"
 
 
-def save_generated_csv(possible_emails: List[str], first: str, last: str, company: str, domain: str) -> str:
+def save_generated_csv(possible_emails: List[str], first: str, last: str, company: str, domain: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"recruiter_emails_{clean_name(first)}_{clean_name(last)}_{timestamp}.csv"
+    filename = TEMP_DIR / f"recruiter_emails_{clean_name(first)}_{clean_name(last)}_{timestamp}.csv"
 
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -98,27 +87,27 @@ def save_generated_csv(possible_emails: List[str], first: str, last: str, compan
     return filename
 
 
-def launch_sender(csv_file: str, resume_path: str, max_send: int):
+def launch_sender(csv_file: Path, resume_path: str, max_send: int):
     if not os.path.exists(SENDER_SCRIPT):
         print(f"❌ Sender script not found: {SENDER_SCRIPT}")
-        return
+        sys.exit(1)
 
-    if not os.path.exists(csv_file):
+    if not csv_file.exists():
         print(f"❌ Input CSV not found: {csv_file}")
-        return
+        sys.exit(1)
 
     if not resume_path:
         print("❌ Resume path is required to start sender.")
-        return
+        sys.exit(1)
 
     if not os.path.exists(resume_path):
         print(f"❌ Resume file not found: {resume_path}")
-        return
+        sys.exit(1)
 
     cmd = [
         sys.executable,
         SENDER_SCRIPT,
-        "--input", csv_file,
+        "--input", str(csv_file),
         "--send-application-emails",
         "--resume-path", resume_path,
         "--max-send", str(max_send),
@@ -132,9 +121,10 @@ def launch_sender(csv_file: str, resume_path: str, max_send: int):
     exit_code = os.system(pretty_cmd)
 
     if exit_code == 0:
-        print("✅ Email sender finished! Check validation_results.csv")
+        print("✅ Email sender finished! Check result/ for final report")
     else:
-        print(f"⚠️ Sender exited with code: {exit_code}")
+        print(f"⚠️ Email sender failed with exit code: {exit_code}")
+        sys.exit(1)
 
 
 def process_person(first: str, last: str, company: str, auto_run: bool = False, resume_path: str = ""):
@@ -152,22 +142,29 @@ def process_person(first: str, last: str, company: str, auto_run: bool = False, 
         print(f"   • {email}")
 
     filename = save_generated_csv(possible_emails, first, last, company, domain)
-    print(f"\n💾 All possible emails saved to → {filename}")
+    print(f"\n💾 Temporary recruiter CSV saved to → {filename}")
 
     should_run = auto_run
     if not auto_run:
         should_run = input("\nRun validation on these emails now? (y/n): ").strip().lower() == 'y'
 
     if should_run:
-        resume_path = resume_path or DEFAULT_RESUME_PATH
         if not resume_path:
             resume_path = input("Resume path (e.g. myresume.pdf): ").strip()
 
-        launch_sender(
-            csv_file=filename,
-            resume_path=resume_path,
-            max_send=len(possible_emails),
-        )
+        try:
+            launch_sender(
+                csv_file=filename,
+                resume_path=resume_path,
+                max_send=len(possible_emails),
+            )
+        finally:
+            try:
+                if filename.exists():
+                    filename.unlink()
+                    print(f"🧹 Deleted temporary file → {filename}")
+            except Exception as cleanup_err:
+                print(f"⚠️ Could not delete temp file {filename}: {cleanup_err}")
 
 
 def process_batch_csv(input_csv: str, auto_run: bool = False, resume_path: str = ""):
@@ -219,7 +216,6 @@ def main():
     print("RECRUITER EMAIL GENERATOR — EXHAUSTIVE PERMUTATIONS")
     print("=" * 70)
 
-    # Batch mode
     if args.input_csv:
         process_batch_csv(
             input_csv=args.input_csv,
@@ -229,7 +225,6 @@ def main():
         print("\n🎯 Batch processing done!")
         return
 
-    # Interactive mode
     first = input("Recruiter First Name : ").strip()
     last = input("Recruiter Last Name  : ").strip()
     company = input("Company Name         : ").strip()

@@ -67,8 +67,8 @@
       <div class="hero-grid">
         <div>
           <div class="badge">Recruiter Outreach Dashboard</div>
-          <h1>Persistent recruiter email sender</h1>
-          <p class="sub">Your profile is stored locally on disk in <strong>data/profile.json</strong> and your uploaded resume path is saved there too. You can update the profile at any time without re-entering everything.</p>
+          <h1>Persistent recruiter email sender, just Add recruiters name, company, set your sender profile, and cold email connections effortlessly. </h1>
+          <p class="sub">Your profile is stored locally on your storage in <strong>data/profile.json</strong> and your uploaded resume path is saved there too. You can update the profile at any time without re-entering everything.</p>
         </div>
         <div class="switch">
           <span>🌙</span><button class="toggle" id="themeToggle"></button><span>☀️</span>
@@ -158,14 +158,14 @@
       const wrapper = document.createElement("div");
       wrapper.className = "recruiter-row";
       wrapper.innerHTML = `
-        <div class="field"><label>First name</label><input class="firstName" placeholder="Alexander" /></div>
-        <div class="field"><label>Last name</label><input class="lastName" placeholder="Zlotnikov" /></div>
-        <div class="field"><label>Company</label><input class="company" placeholder="Farmers Insurance" /></div>
+        <div class="field"><label>First name</label><input class="firstName" placeholder="First Name" /></div>
+        <div class="field"><label>Last name</label><input class="lastName" placeholder="Last Name" /></div>
+        <div class="field"><label>Company</label><input class="company" placeholder="Company Name" /></div>
         <div class="field" style="justify-content:end;"><label>&nbsp;</label><button class="danger removeBtn" type="button">Remove</button></div>
       `;
       wrapper.querySelector(".removeBtn").addEventListener("click", () => {
         if (document.querySelectorAll(".recruiter-row").length > 1) {
-          wrapper.remove();
+          wrapper.remove();z
           updateStats();
         }
       });

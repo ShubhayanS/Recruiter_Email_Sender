@@ -2,5 +2,8 @@
 venv/
 __pycache__/
 *.log
-*.csv
-*.pdf
+uploads/
+temp/
+result/
+data/people_*.csv
+sent_history.csv

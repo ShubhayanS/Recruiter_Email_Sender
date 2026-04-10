@@ -1,13 +1,5 @@
-# Optional additional info in email signature:
-#   {YOUR_PHONE}<br>
-#   LinkedIn: <a href="{YOUR_LINKEDIN}">{YOUR_LINKEDIN}</a><br>
-#   GitHub: <a href="{YOUR_GITHUB}">{YOUR_GITHUB}</a>
-#   {portfolio_html}
-
 from dotenv import load_dotenv
 load_dotenv(override=True)
-
-
 
 import re
 import dns.resolver
@@ -43,8 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-
 # ========================== CONFIG ==========================
 DISPOSABLE_BLOCKLIST_URL = "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"
 
@@ -55,6 +45,9 @@ COMMON_TYPO_DOMAINS = {
     "outlok.com": "outlook.com",
 }
 
+RESULTS_DIR = Path("result")
+RESULTS_DIR.mkdir(exist_ok=True)
+
 # ========================== YOUR EMAIL PROFILE ==========================
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
 APP_PASSWORD  = os.getenv("GMAIL_APP_PASSWORD")
@@ -62,12 +55,14 @@ APP_PASSWORD  = os.getenv("GMAIL_APP_PASSWORD")
 YOUR_NAME = os.getenv("YOUR_NAME", "Your Name")
 YOUR_PHONE = os.getenv("YOUR_PHONE", "")
 YOUR_LINKEDIN = os.getenv("YOUR_LINKEDIN", "")
+YOUR_GITHUB = os.getenv("YOUR_GITHUB", "")
 YOUR_PORTFOLIO = os.getenv("YOUR_PORTFOLIO", "")
 
 DEFAULT_RESUME_PATH = os.getenv("RESUME_PATH")
 
-print("Sending from:", GMAIL_ADDRESS)
-logger.info(f"Using Gmail account from env: {GMAIL_ADDRESS}")
+if not GMAIL_ADDRESS or not APP_PASSWORD:
+    raise ValueError("❌ Missing GMAIL_ADDRESS or GMAIL_APP_PASSWORD in .env")
+
 
 # ========================== DATA MODEL ==========================
 @dataclass
@@ -98,7 +93,6 @@ def load_recruiter_rows(csv_file: str) -> List[RecruiterRow]:
             if not row:
                 continue
 
-            # Skip header if present
             if i == 1 and row[0].strip().lower() in {"email", "email_address"}:
                 continue
 
@@ -134,6 +128,7 @@ def load_recruiter_rows(csv_file: str) -> List[RecruiterRow]:
 def load_sent_history(history_file: str = "sent_history.csv") -> Set[str]:
     if not os.path.exists(history_file):
         return set()
+
     sent = set()
     with open(history_file, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
@@ -153,21 +148,6 @@ def save_sent_history(email_address: str, history_file: str = "sent_history.csv"
         writer.writerow([email_address, datetime.now().isoformat()])
 
 
-def save_sent_recruiter_history(recruiter: RecruiterRow, history_file: str = "sent_recruiter_history.csv"):
-    exists = os.path.exists(history_file)
-    with open(history_file, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not exists:
-            writer.writerow(["Email", "FirstName", "LastName", "Company", "SentAt"])
-        writer.writerow([
-            recruiter.email,
-            recruiter.first_name,
-            recruiter.last_name,
-            recruiter.company_name,
-            datetime.now().isoformat()
-        ])
-
-
 def validate_syntax(email_str: str) -> bool:
     return bool(re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email_str))
 
@@ -182,6 +162,7 @@ def is_disposable(domain: str) -> bool:
                 return True
     except Exception:
         pass
+
     common = {
         "10minutemail.com", "tempmail.org", "guerrillamail.com", "mailinator.com",
         "yopmail.com", "dispostable.com", "trashmail.com", "temp-mail.org",
@@ -287,12 +268,14 @@ def extract_recipient_from_bounce(msg, candidates: Set[str]) -> str | None:
 
 
 def build_subject(company_name: str) -> str:
-    return f"Interested in opportunity at {company_name}"
+    return f"Interested in opportunity at {company_name or ''}"
 
 
 def build_email_body_text(first_name: str, company_name: str) -> str:
     greeting_name = first_name if first_name else "Hiring Team"
+    github_line = f"GitHub: {YOUR_GITHUB}\n" if YOUR_GITHUB else ""
     portfolio_line = f"Portfolio: {YOUR_PORTFOLIO}\n" if YOUR_PORTFOLIO else ""
+    phone_line = f"{YOUR_PHONE}\n" if YOUR_PHONE else ""
 
     return f"""Hi {greeting_name},
 
@@ -306,17 +289,16 @@ Thank you for your time and consideration.
 
 Best regards,
 {YOUR_NAME}
-LinkedIn: {YOUR_LINKEDIN}
-{portfolio_line}"""
+{phone_line}LinkedIn: {YOUR_LINKEDIN}
+{github_line}{portfolio_line}"""
 
 
 def build_email_body_html(first_name: str, company_name: str) -> str:
     greeting_name = first_name if first_name else "Hiring Team"
 
-    portfolio_html = (
-        f'<br>Portfolio: <a href="{YOUR_PORTFOLIO}">{YOUR_PORTFOLIO}</a>'
-        if YOUR_PORTFOLIO else ""
-    )
+    phone_html = f"{YOUR_PHONE}<br>" if YOUR_PHONE else ""
+    github_html = f'GitHub: <a href="{YOUR_GITHUB}">{YOUR_GITHUB}</a><br>' if YOUR_GITHUB else ""
+    portfolio_html = f'Portfolio: <a href="{YOUR_PORTFOLIO}">{YOUR_PORTFOLIO}</a><br>' if YOUR_PORTFOLIO else ""
 
     return f"""
     <html>
@@ -328,20 +310,22 @@ def build_email_body_html(first_name: str, company_name: str) -> str:
         <p>
           My name is <strong>{YOUR_NAME}</strong>, and I am reaching out to express my interest in
           a potential opportunity at <strong>{company_name}</strong>. I come from a background in
-          data engineering, data science, and software development, and I would love talk more about my passion,
-          understand the hiring process and how I can be a great fit for the role.
+          data engineering, data science, and software development, and I would love to talk more about my background,
+          understand the hiring process, and how I can be a great fit for the role.
         </p>
 
         <p>
-          I have attached my resume for your review. I would be grateful if you can provide me sometime in your schedule.
+          I have attached my resume for your review. I would be grateful if you can provide me some time in your schedule.
         </p>
 
-        <p>Thank you again for your time and consideration. I will be looking forward to hearing from you.</p>
+        <p>Thank you again for your time and consideration. I look forward to hearing from you.</p>
 
         <p>
           Best regards,<br>
           <strong>{YOUR_NAME}</strong><br>
+          {phone_html}
           LinkedIn: <a href="{YOUR_LINKEDIN}">{YOUR_LINKEDIN}</a><br>
+          {github_html}
           {portfolio_html}
         </p>
       </body>
@@ -481,25 +465,74 @@ def monitor_bounces(sender: str, app_pw: str, sent_emails: Set[str], start_time:
     return results
 
 
-def save_results_to_csv(results: Dict[str, str], validation: Dict[str, str], filename: str = "validation_results.csv"):
-    valid_emails = []
-    for email_address, status in results.items():
-        if status == "No bounce detected (likely valid)":
-            valid_emails.append({
-                'Email': email_address,
-                'Status': 'VALID',
-                'Details': validation.get(email_address, 'Domain valid'),
-                'Timestamp': datetime.now().isoformat()
-            })
+def safe_slug(value: str) -> str:
+    value = (value or "").strip().lower()
+    value = re.sub(r"[^a-z0-9]+", "_", value)
+    return value.strip("_") or "unknown"
 
-    if valid_emails:
-        with open(filename, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=['Email', 'Status', 'Details', 'Timestamp'])
-            writer.writeheader()
-            writer.writerows(valid_emails)
-        logger.info(f"Saved {len(valid_emails)} VALID emails to {filename}")
+
+def build_result_filename(recruiters: List[RecruiterRow]) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if len(recruiters) == 1:
+        r = recruiters[0]
+        first = safe_slug(r.first_name)
+        last = safe_slug(r.last_name)
+        company = safe_slug(r.company_name)
+        filename = f"{first}_{last}_{company}_{timestamp}.csv"
     else:
-        logger.info("No valid emails found.")
+        filename = f"batch_results_{timestamp}.csv"
+
+    return RESULTS_DIR / filename
+
+
+def save_final_report(
+    recruiters: List[RecruiterRow],
+    final_results: Dict[str, str],
+    validation: Dict[str, str],
+) -> Path:
+    output_file = build_result_filename(recruiters)
+
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "Email",
+            "FirstName",
+            "LastName",
+            "Company",
+            "Validation",
+            "FinalStatus",
+            "RawResult",
+            "Timestamp"
+        ])
+
+        for recruiter in recruiters:
+            email_addr = recruiter.email
+            val = validation.get(email_addr, "—")
+            res = final_results.get(email_addr, "Not sent")
+
+            if res == "No bounce detected (likely valid)":
+                final_status = "VALID"
+            elif "BOUNCED" in res or "REJECTED" in res:
+                final_status = "INVALID"
+            elif "Send failed" in res or "Send error" in res:
+                final_status = "SEND_FAILED"
+            else:
+                final_status = "UNKNOWN"
+
+            writer.writerow([
+                email_addr,
+                recruiter.first_name,
+                recruiter.last_name,
+                recruiter.company_name,
+                val,
+                final_status,
+                res,
+                datetime.now().isoformat()
+            ])
+
+    logger.info(f"Saved final report to {output_file}")
+    return output_file
 
 
 # ========================== MAIN ==========================
@@ -508,7 +541,7 @@ def main():
     parser = argparse.ArgumentParser(description="Email Sender + Validator")
     parser.add_argument("--input", required=True, help="CSV file with recruiter rows")
     parser.add_argument("--max-send", type=int, default=400)
-    parser.add_argument("--workers", type=int, default=4)  # kept for compatibility, no longer used for sending
+    parser.add_argument("--workers", type=int, default=4)  # kept for compatibility
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--no-catchall-probe", action="store_true")
@@ -518,6 +551,7 @@ def main():
     args = parser.parse_args()
 
     logger.info("=== EMAIL SENDER START ===")
+    logger.info(f"Using Gmail account from env: {GMAIL_ADDRESS}")
 
     history_file = "sent_history.csv"
     already_sent = load_sent_history(history_file) if args.resume else set()
@@ -525,11 +559,13 @@ def main():
     validation: Dict[str, str] = {}
 
     if args.send_application_emails:
-        if not args.resume_path:
-            logger.error("--resume-path is required when --send-application-emails is used")
+        recruiters = load_recruiter_rows(args.input)
+
+        resume_path = args.resume_path or DEFAULT_RESUME_PATH
+        if not resume_path:
+            logger.error("Resume path missing. Provide --resume-path or set RESUME_PATH in .env")
             sys.exit(1)
 
-        recruiters = load_recruiter_rows(args.input)
         logger.info(f"Loaded {len(recruiters)} recruiter rows | Already sent: {len(already_sent)}")
 
         send_candidates: List[RecruiterRow] = []
@@ -566,21 +602,18 @@ def main():
 
         if args.validate_only or not send_candidates:
             logger.info("Validation-only mode or no emails to send.")
+            final_results = {r.email: "Not sent" for r in recruiters}
+            report_file = save_final_report(recruiters, final_results, validation)
+            logger.info(f"Final report available at: {report_file}")
             return
 
         send_start = datetime.now()
         sent_ok: List[str] = []
         immediate_rejects: Dict[str, str] = {}
 
-        # Sequential sending: one email at a time with random delay
         counter = 1
         for recruiter in tqdm(send_candidates, desc="Sending"):
             try:
-                resume_path = args.resume_path or DEFAULT_RESUME_PATH
-
-                if not resume_path:
-                    raise ValueError("❌ Resume path missing. Provide --resume-path or set RESUME_PATH in .env")
-
                 success, status = send_application_email(
                     GMAIL_ADDRESS,
                     APP_PASSWORD,
@@ -591,9 +624,13 @@ def main():
 
                 if success:
                     sent_ok.append(recruiter.email)
-                    save_sent_history(recruiter.email, history_file)
-                    save_sent_recruiter_history(recruiter, "sent_recruiter_history.csv")
                     logger.info(f"Sent successfully -> {recruiter.email}")
+
+                    try:
+                        save_sent_history(recruiter.email, history_file)
+                        logger.info(f"Recorded history -> {recruiter.email}")
+                    except Exception as hist_err:
+                        logger.error(f"History write failed for {recruiter.email}: {hist_err}")
                 else:
                     immediate_rejects[recruiter.email] = status
                     logger.warning(f"Failed to send -> {recruiter.email} | {status}")
@@ -666,11 +703,11 @@ def main():
             f"Send Errors: {failed_count} | Total Processed: {len(recruiters)}"
         )
 
-        save_results_to_csv(final_results, validation)
+        report_file = save_final_report(recruiters, final_results, validation)
+        logger.info(f"Final report available at: {report_file}")
         logger.info("Process completed successfully.")
         return
 
-    # Fallback to old email-only flow if user does not use recruiter mode
     emails = load_emails(args.input)
     logger.info(f"Loaded {len(emails)} emails | Already sent: {len(already_sent)}")
 
