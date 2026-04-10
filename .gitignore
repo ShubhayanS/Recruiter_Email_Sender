@@ -7,3 +7,4 @@ temp/
 result/
 data/people_*.csv
 sent_history.csv
+data/profile.json
