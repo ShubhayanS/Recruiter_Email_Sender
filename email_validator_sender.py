@@ -648,8 +648,8 @@ def main():
         final_results: Dict[str, str] = dict(immediate_rejects)
 
         if sent_ok:
-            logger.info("Waiting 90 seconds for initial bounces...")
-            time.sleep(90)
+            logger.info("Waiting upto 12 minutes for initial bounces...")
+            time.sleep(700)
             bounce_dict = monitor_bounces(
                 GMAIL_ADDRESS,
                 APP_PASSWORD,
